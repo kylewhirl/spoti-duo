@@ -85,9 +85,9 @@ static SGRArtworkField *fieldIn(UIView *page) {
     %orig;
     UIView *list = (UIView *)self;
     if (!SGRArtistPageOf(list)) return;
-    if (list.backgroundColor && SGRIsBaseSurface(list.backgroundColor.CGColor)) list.backgroundColor = UIColor.clearColor;
+    if (SGRNativeSurfaceHasNeutralBacking(list) || (list.backgroundColor && SGRIsBaseSurface(list.backgroundColor.CGColor))) list.backgroundColor = UIColor.clearColor;
     for (UIView *sub in list.subviews) {
-        if (sub.backgroundColor && SGRIsBaseSurface(sub.backgroundColor.CGColor)) sub.backgroundColor = UIColor.clearColor;
+        if (([sub isKindOfClass:UIScrollView.class] && SGRNativeSurfaceHasNeutralBacking(sub)) || (sub.backgroundColor && SGRIsBaseSurface(sub.backgroundColor.CGColor))) sub.backgroundColor = UIColor.clearColor;
     }
 }
 %end

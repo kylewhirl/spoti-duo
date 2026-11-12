@@ -128,6 +128,20 @@ static void logOnce(NSString *what) {
     SGLog(@"redesign artist: %@", what);
 }
 
+// The adapter retains the native neutral role before mapping it to the current
+// track's palette. Use that provenance only for full-width artist section paint;
+// narrow nested cards, images, controls and interaction feedback remain native.
+static void clearArtistBacking(UIView *view, UIView *cell, CGFloat wide) {
+    if ([view isKindOfClass:UIImageView.class] || [view isKindOfClass:UIControl.class]) return;
+    if ([view isKindOfClass:UICollectionViewCell.class]) {
+        UICollectionViewCell *item=(id)view;
+        if (item.selected || item.highlighted || (view!=cell && view.bounds.size.width<wide)) return;
+    }
+    if (view.bounds.size.width>=wide && SGRNativeSurfaceHasNeutralBacking(view))
+        view.backgroundColor=UIColor.clearColor;
+    for(UIView *child in view.subviews)clearArtistBacking(child,cell,wide);
+}
+
 %hook _TtC12Element_List18CollectionViewCell
 - (UICollectionViewLayoutAttributes *)preferredLayoutAttributesFittingAttributes:(UICollectionViewLayoutAttributes *)attributes {
     UICollectionViewCell *cell = (UICollectionViewCell *)self;
@@ -170,6 +184,7 @@ static void logOnce(NSString *what) {
         // What the cell paints over the field -- the "You liked" row, every carousel's collection and the
         // fade Popular's "See more" draws over its last track (device, trees/continuous/3.txt 2026-09-18).
         SGRClearCellPaint(cell);
+        clearArtistBacking(cell,cell,cell.bounds.size.width*.75);
     }
 }
 

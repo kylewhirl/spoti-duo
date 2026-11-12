@@ -39,7 +39,7 @@ static const CGFloat kMinCover = 80, kMinHero = 120;
 // The collapsed ImageHeaderView, Spotify's navigation bar; the text fades out over the last kFade before it.
 static const CGFloat kBar = 100, kFade = 150;
 
-static char kInfoKey, kHeroKey, kHeroHeightKey, kContainerHeightKey, kRowWatchedKey;
+static char kInfoKey, kHeroKey, kRowWatchedKey;
 static char kTitleKey, kMetaKey, kShuffleKey, kPlayKey, kFollowKey, kArtworkKey, kBarKey, kMoreKey, kMoreButtonKey;
 
 #pragma mark - Spotify's views
@@ -199,8 +199,19 @@ static UIImageView *photoIn(UIView *artwork) {
     return found ?: empty;
 }
 
-// The picture from the top of the container down to `bottom`, which comes from the container at rest and only
-// ever grows, so it does not change size while the page loads or scrolls.
+// Fill only the native title-layout gap above a Duo header. Counter the owning
+// scroll's offset to measure its resting placement, never move that scroll or bar.
+static CGFloat heroTopBleed(UIView *container) {
+    UIView *page=SGRArtistPageOf(container);
+    if (!page || CGRectIsNull(SGRVerticalBarFrameIn(page, SGRVerticalBarExtent))) return 0;
+    CGFloat gap=[container convertPoint:container.bounds.origin toView:page].y-CGRectGetMinY(page.bounds);
+    for (UIView *v=container.superview; v && v!=page; v=v.superview)
+        if ([v isKindOfClass:UIScrollView.class]) gap+=((UIScrollView *)v).contentOffset.y;
+    return isfinite(gap) && gap>0 && gap<=kBar ? gap : 0;
+}
+
+// The picture follows the current scrolling container, not a historical maximum.
+// UIKit may temporarily expand the container while restoring a scrolled page.
 static void applyHero(UIView *container, UIView *artwork, CGFloat bottom) {
     SGRArtistHero *hero = objc_getAssociatedObject(container, &kHeroKey);
     if (!hero) {
@@ -210,14 +221,11 @@ static void applyHero(UIView *container, UIView *artwork, CGFloat bottom) {
     if (hero.superview != container) [container insertSubview:hero atIndex:0];
     else if (container.subviews.firstObject != hero) [container sendSubviewToBack:hero];
 
-    CGFloat height = [objc_getAssociatedObject(hero, &kHeroHeightKey) doubleValue];
-    if (bottom > height + 0.5) {
-        height = round(bottom);
-        objc_setAssociatedObject(hero, &kHeroHeightKey, @(height), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        SGLog(@"redesign artist: hero %.0fpt across the top of the page", height);
-    }
-    if (height < kMinHero) return;
-    setFrame(hero, CGRectMake(0, 0, container.bounds.size.width, height));
+    CGFloat height = round(bottom);
+    if (height < kMinHero || !isfinite(height)) { hero.hidden=YES; return; }
+    hero.hidden=NO;
+    CGFloat bleed=heroTopBleed(container);
+    setFrame(hero, CGRectMake(0, -bleed, container.bounds.size.width, height+bleed));
     hero.fieldColor = SGRArtistFieldColor(container);
     [hero followArtwork:photoIn(artwork)];
 }
@@ -294,9 +302,9 @@ static void applyHeader(UIView *header) {
     if (fabs(info.alpha - alpha) > 0.01) info.alpha = alpha;
 
     // The picture reaches to where the content's top is at rest, plus the name. The container keeps its
-    // height as the header collapses, and only ever grows as the page loads.
-    CGFloat rest = MAX([objc_getAssociatedObject(container, &kContainerHeightKey) doubleValue], container.bounds.size.height);
-    objc_setAssociatedObject(container, &kContainerHeightKey, @(rest), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    // height as the header collapses. Re-read it after resizing/restoration rather than
+    // retaining a transient expanded maximum across foreground transitions.
+    CGFloat rest = container.bounds.size.height;
     CGFloat bottom = rest - SGRHeaderInfoBottom - [info contentHeightForWidth:info.bounds.size.width] + SGRHeaderInfoTitleRise;
     applyHero(container, artwork, bottom);
 

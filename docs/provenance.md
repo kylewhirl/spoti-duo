@@ -54,3 +54,10 @@ whose old settings enabled it. It creates no install identifier and returns no u
 
 Upstream website/source/signing links are labeled as upstream attribution/help. The fork does
 not direct bug reports to the original maintainer or show upstream donation prompts.
+
+## Artist backing and header follow-up
+
+The artist-only backdrop and header-restoration corrections were applied as local Duo deltas.
+`ArtistField.x`, `ArtistHeader.x` and `ArtistSections.x` are unchanged between the GPL
+baseline and the development checkout's upstream HEAD; the native-surface adapter is local
+Duo code. No later restricted upstream source is introduced by this update.

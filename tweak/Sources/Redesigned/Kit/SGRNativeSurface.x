@@ -257,6 +257,16 @@ static NSMutableDictionary *originals(UIView *view, BOOL create) {
     }
     return values;
 }
+BOOL SGRNativeSurfaceHasNeutralBacking(UIView *view) {
+    if (!view || !SGRNativeSurfaceManaged(view) ||
+        [view isKindOfClass:UIImageView.class] || [view isKindOfClass:UIControl.class]) return NO;
+    NSDictionary *saved=originals(view,NO);
+    NSString *key=saved[@"layerBackground"]?@"layerBackground":@"background";
+    UIColor *source=saved[key];
+    if (![source isKindOfClass:UIColor.class] || CGColorGetAlpha(source.CGColor)<.99) return NO;
+    NSUInteger role=[roles(view,NO)[key] unsignedIntegerValue] & ~SGRRoleLightSource;
+    return role==SGRRoleBase || role==SGRRoleElevated;
+}
 static void remember(UIView *view, NSString *key, id value) {
     if (replaying && originals(view,NO)[key]) return;
     id previous=originals(view,NO)[key];

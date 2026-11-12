@@ -19,3 +19,6 @@ UIColor *SGRNativeLightBackground(UIColor *color);
 // One insertion/removal subtree, without acquiring an independent appearance root.
 void SGRRefreshNativeSurfaceSubtree(UIView *view);
 BOOL SGRNativeSurfaceHasRootWithin(UIView *view);
+
+// Read-only provenance for owned page backings; never infers from emitted accent RGB.
+BOOL SGRNativeSurfaceHasNeutralBacking(UIView *view);
