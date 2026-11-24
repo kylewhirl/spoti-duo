@@ -1,6 +1,6 @@
-// Home redesign: of the sections the feed sends, only the music ones stay: the grid of shortcuts, the
+// Home redesign: of the sections the feed sends, the grid of shortcuts, the native Talk to Spotify prompt, the
 // DJ and the shelves of cards (Recents, Jump back in, Your playlists, New releases, the mixes, For fans
-// of...). Every other section reports no height, so the list closes up around it: the medium density
+// of...) stay. Every other section reports no height, so the list closes up around it: the medium density
 // previews (a video or an episode playing muted under Unmute and Watch full episode, or a playlist to
 // Preview), a heading over one of those (Fitness for you, Videos from your top artists), the episode
 // cards, and any kind the server adds later.
@@ -94,6 +94,36 @@ static void dropDJHeading(UIView *content) {
     }
 }
 
+// Keep Spotify's own input and mic when the signed-in account is offered the feature.
+// Match the entry-point terminology used by Home's flags, not a translated label. Also recognize native
+// input controls in differently wrapped versions of the prompt. Do not descend into carousel cells.
+static BOOL isPromptSection(UIView *view, NSUInteger depth, NSUInteger *remaining) {
+    if (depth == 0 || *remaining == 0) return NO;
+    --*remaining;
+    NSString *className = NSStringFromClass(view.class);
+    NSString *identifier = view.accessibilityIdentifier ?: @"";
+    NSArray<NSString *> *markers = @[@"InteractiveEntryPoint", @"interactive_entrypoint", @"TalkToSpotify"];
+    for (NSString *marker in markers) {
+        if ([className rangeOfString:marker options:NSCaseInsensitiveSearch].location != NSNotFound ||
+            [identifier rangeOfString:marker options:NSCaseInsensitiveSearch].location != NSNotFound) return YES;
+    }
+    // These sections have their own classification. Do not keep them because of incidental controls.
+    if ([className containsString:@"Discovery_PromoElement"] ||
+        [className containsString:@"Discovery_PreviewElement"] ||
+        [className containsString:@"Discovery_MediumDensityCardKit"] ||
+        [className containsString:@"Discovery_DJElementKit"] ||
+        [identifier isEqualToString:@"ActionCardCarouselElement"]) return NO;
+    if ([view isKindOfClass:UITextField.class] ||
+        ([view isKindOfClass:UITextView.class] && ((UITextView *)view).editable) ||
+        (view.accessibilityTraits & UIAccessibilityTraitSearchField)) return YES;
+    if ([view isKindOfClass:UICollectionView.class]) return NO;
+    for (UIView *child in view.subviews) {
+        if (*remaining == 0) break;
+        if (isPromptSection(child, depth - 1, remaining)) return YES;
+    }
+    return NO;
+}
+
 static SGRHomeKind kindOf(UIView *content, NSString **rootName) {
     UIView *root = content.subviews.firstObject.subviews.firstObject;
     if (!root) return SGRHomeKindPending;
@@ -101,6 +131,8 @@ static SGRHomeKind kindOf(UIView *content, NSString **rootName) {
     static Class shelf;
     if (!shelf) shelf = NSClassFromString(@"_TtC16Home_CarouselKit29TouchCancellingCollectionView");
     if (shelf && [root isKindOfClass:shelf]) return SGRHomeKindKeep;
+    NSUInteger inspectionBudget = 96;
+    if (isPromptSection(root, 10, &inspectionBudget)) return SGRHomeKindKeep;
     if ([root isKindOfClass:UICollectionView.class]) return gridKind((UICollectionView *)root);
     if ([root isKindOfClass:UIStackView.class]) return stackKind((UIStackView *)root);
     return SGRHomeKindDrop;
@@ -138,9 +170,12 @@ static void expand(UICollectionViewCell *cell) {
     if (!isSection(content)) return %orig;
     CFTimeInterval began = SGRHomeProbeBegin();
     dropDJHeading(content);
+    // A reused cell that held a dropped section must be visible before UIKit measures its new input.
+    NSString *rootName = nil;
+    if (objc_getAssociatedObject(cell, &kCollapsedKey) && kindOf(content, &rootName) == SGRHomeKindKeep) expand(cell);
     UICollectionViewLayoutAttributes *result = %orig;
 
-    NSString *rootName = nil;
+    rootName = nil;
     SGRHomeKind kind = kindOf(content, &rootName);
     BOOL collapsed = objc_getAssociatedObject(cell, &kCollapsedKey) != nil;
     if (kind == SGRHomeKindDrop) {
@@ -149,7 +184,10 @@ static void expand(UICollectionViewCell *cell) {
         logOnce([@"dropped a section of " stringByAppendingString:rootName]);
     } else if (kind == SGRHomeKindKeep) {
         // Cells are reused across kinds: one collapsed before holds a section to keep now.
-        if (collapsed) expand(cell);
+        if (collapsed) {
+            expand(cell);
+            result = %orig;
+        }
         logOnce([@"kept a section of " stringByAppendingString:rootName]);
     } else {
         logOnce([@"sized a section before its root was in, left as it is: " stringByAppendingString:rootName ?: @"no root"]);
@@ -180,8 +218,6 @@ BOOL SGRHomeSectionCollapsed(UIView *cell) {
     SGRedesignForceFlags(@"home", @{
         // The badge on the DJ card.
         @"ios-home-evopage-impl.dj_mdc_beta_badge_enabled": @NO,
-        // The prompt field for Spotify's AI on Home.
-        @"ios-home-evopage-impl.interactive_entrypoint_enabled": @NO,
     });
     if (!SGRedesignedUI()) return;
     %init;
